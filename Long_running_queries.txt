@@ -1,0 +1,90 @@
+
+  -----Currently Running Queries-----
+  
+select s.username,s.sid,s.serial#,s.last_call_et/60 mins_running,q.sql_text from v$session s 
+join v$sqltext_with_newlines q
+on s.sql_address = q.address
+ where status='ACTIVE'
+and type <>'BACKGROUND'
+and last_call_et>2
+order by sid,serial#,q.piece;
+
+
+
+
+====================================================
+
+----------Long running queries with duration-------------
+
+select sid, serial#, username, to_char(sysdate-last_call_et/24/60/60,'hh24:mi:ss') started,STATUS,
+ trunc(last_call_et/60) || ' mins, ' || mod(last_call_et,60) ||
+' secs' dur,
+ (select sql_text from v$sql where address = sql_address ) sql_text
+ from v$session
+ where username is not null
+ and last_call_et > 2
+ and status = 'ACTIVE'
+
+
+=========================================================
+
+
+SELECT opname, username, sql_fulltext, to_char(start_time,'DD-MON-YYYY HH24:MI:SS'),
+(sofar/totalwork)*100 "%_complete", time_remaining, s. con_id
+FROM v$session_longops s INNER JOIN v$sql sl USING (sql_id) 
+WHERE time_remaining > 0;
+ 
+
+=========================================================
+
+
+------Memory Consumption-------------------
+
+
+select decode( grouping(nm), 1, 'total', nm ) nm, round(sum(val/1024/1024)) mb
+from
+(
+select 'sga' nm, sum(value) val
+from v$sga
+union all
+select 'pga', sum(a.value)
+from v$sesstat a, v$statname b
+where b.name = 'session pga memory'
+and a.statistic# = b.statistic#
+)
+group by rollup(nm);
+
+
+========================================================================================================
+
+
+
+-------This query gives you the currently active processes AND runnng SQl_Query AS well--------------
+
+SELECT sess.process, sess.status, sess.username, sess.schemaname, sql.sql_text
+  FROM v$session sess,
+       v$sql     sql
+ WHERE sql.sql_id(+) = sess.sql_id
+   AND sess.type     = 'USER'
+	AND STATUS='ACTIVE'
+
+
+=====================================================================================================
+   
+   
+======This will gives you the session that blocks other sessions============
+
+
+select lo.session_id,lo.oracle_username,lo.os_user_name,
+lo.process,do.object_name,
+decode(lo.locked_mode,0, 'None',1, 'Null',2, 'Row Share (SS)',
+3, 'Row Excl (SX)',4, 'Share',5, 'Share Row Excl (SSX)',6, 'Exclusive',
+to_char(lo.locked_mode)) mode_held
+from v$locked_object lo, dba_objects do
+where lo.object_id = do.object_id
+order by 1,5
+
+
+select sid,serial#,username,status from v$session where sid=535;
+
+ALTER system kill SESSION '535, 48507'
